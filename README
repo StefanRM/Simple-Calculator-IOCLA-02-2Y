@@ -1,0 +1,130 @@
+  _______ ______ __  __            ___  
+ |__   __|  ____|  \/  |   /\     |__ \ 
+    | |  | |__  | \  / |  /  \       ) |
+    | |  |  __| | |\/| | / /\ \     / / 
+    | |  | |____| |  | |/ ____ \   / /_ 
+    |_|  |______|_|  |_/_/    \_\ |____|
+                                                                   
+Nume:    Maftei Stefan - Radu
+Grupa:   324CD
+Materie: IOCLA
+
+
+	Parametrii functiei do_operation au fost luati de pe stiva de la primul
+(a - > [ebp + 8]) la ultimul (operation -> [ebp + 16]). Am retinut lungimea fiecarui
+numar si apoi am verificat ce operator a fost dat functiei, ca sa se poata efectua
+operatia respectiva.
+	In programul in limbaj de asamblare care simuleaza un calculator am implementat
+operatiile astfel:
+
+1) "|" (sau pe biti)
+
+	Lungimea rezultatului operatiei va fi lungimea cea mai mare dintre cele doua
+numere a si b.
+	Luam byte cu byte din ambele numere, in ordine little endian (de la LSB la MSB).
+Efectuam operatia 'or' pentru fiecare pereche de bytes, rezultatul punandu-l in numarul
+a, pe aceeasi pozitie de unde am extras byte-ul. Daca numarul a are lungimea mai mare
+decat numarul b, atunci bytes neverificati vor fi aceeasi in urma operatiei 'sau' 
+(ptr ca celalalt numar s-ar completa cu zero pe acesti bytes lipsa*). Daca numarul b are
+lungimea mai mare decat numarul a, atunci bytes care lipsesc din numarul a in urma operatiei
+'sau' vor fi bytes neverificati din b (ptr ca s-ar completa numarul cu zero ca sa aiba
+aceeasi dimensiune*). La dimensiuni egale rezultatul este cel din a, fara alte verificari.
+
+Nota * -> 0 | a = a
+
+2) "&" (si pe biti)
+
+	Lungimea rezultatului operatiei va fi lungimea cea mai mare dintre cele doua
+numere a si b.
+	Luam byte cu byte din ambele numere, in ordine little endian (de la LSB la MSB).
+Efectuam operatia 'and' pentru fiecare pereche de bytes, rezultatul punandu-l in numarul
+a, pe aceeasi pozitie de unde am extras byte-ul. Daca numarul a are lungimea mai mica decat
+numarul b, atunci bytes rezultatul va fi cel din numarul a in urma operatiei 'si' (ptr ca
+numarul a s-ar completa cu zero pe bytes lipsa**). Daca numarul a are lungimea mai mare decat
+numarul b, atunci bytes neverificati din a vor fi zero in urma operatiei 'si' (ptr ca s-ar
+completa numarul b cu zero ca sa aiba aceeasi dimensiune). La dimensiuni egale rezultatul este
+cel din a, fara alte verificari.
+
+Nota ** -> 0 & a = 0
+
+3) "<<" (shiftare la stanga)
+
+	Shiftarea la stanga a x biti este echivalentul a x shiftari la stanga a unui bit.
+	Astfel efectuam operatia de shiftare la stanga cu 1 pe fiecare byte al numarului
+a; daca rezulta un carry il retinem si il adunam la urmatorul byte shiftat. Daca ultimul
+byte (MSB) s-a shiftat la stanga si a rezultat un carry, atunci se mareste lungimea numarului
+a si se adauga carry-ul in noul byte.
+	Aceasta operatie se repeta de un numar de ori egal cu b.
+
+4) ">>" (shiftare la dreapta)
+
+	Shiftarea la dreapta a x biti este echivalentul a x shiftari la dreapta a unui bit.
+	Astfel efectuam operatia de shiftare la dreapta cu 1 pe fiecare byte al numarului a,
+luand bytes de la MSB la LSB (ordine big endian, de la ultimul byte din insiruire la primul).
+Daca MSB este egal cu 1, atunci shiftat la dreapta va rezulta in zero, deci putem scadea
+dimensiunea (ne asiguram ca dimensiunea e mai mare ca 1, ptr ca dimensiunea nu poate deveni zero).
+	Luam apoi fiecare byte din numarul a in ordine big endian, il shiftam la dreapta si
+retinem carry-ul daca exista. Adunam dupa fiecare shiftare carry-ul de dinainte (carry-ul va fi
+numarul 1000 0000 in baza 2 sau 0x80 in baza 16) daca acesta exita.
+	Aceasta operatie se repeta de un numar de ori egal cu b.
+
+5) "+" (adunare)
+
+	Adunarea se imparte in doua cazuri: adunarea numerelor cu acelasi semn si adunarea numerelor
+cu semn diferit.
+	La inceput adaugam bytes de zero in numarul cu lungime mai mica la inceputul numarului respectiv,
+pentru ca cele doua numere sa aiba aceeasi lungime. Apoi se verifica semnul pentru a distinge cazul:
+
+	a) Ambele acelasi semn:
+		-> daca a existat carry (transport la adunare) se seteaza flag-ul de carry (CF);
+		-> se iau bytes din cele doua numere in acelasi timp in ordine little endian;
+		-> se aduna cu carry si se salveaza rezultatul in numarul a pe aceeasi pozitie;
+		-> se salveaza carry-ul rezultat din adunarea precedenta (transportul) pentru a fi
+setat inainte de urmatoarea adunare;
+		-> dupa ce s-au adunat toti bytes, daca a rezultat carry dupa ultima adunare, atunci
+se mareste lungimea numarului a, iar pe byte-ul nou se adauga carry-ul;
+		-> semnul numarului ramane acelasi.
+
+	b) Ambele cu semne distincte:
+		-> se disting din nou doua cazuri: - + si + -; le vom trata identic, in sensul ca
+pe cele de forma - + le vom interschimba astfel incat sa fie + -;
+		-> interschimbarea se va face byte cu byte intre cele doua numere a si b;
+		-> se vor interschimb si semnul si lungimea;
+		-> astfel vom avea mereu cazul + -;
+		-> vom compara numerele in modul astfel incat sa scadem din cel cu modul mai mare
+pe cel cu modul mai mic (vom folosi relatia matematica -a + b = -(a - b) ); comparatia se face la
+nivel de MSB-uri;
+		-> din nou, daca |a| < |b| interschimbam, dar de data asta semnul celui cu modul mai
+mare va domina si va fi stocat in a;
+		-> daca a existat carry (imprumut la scadere) se seteaza flag-ul de carry (CF);
+		-> se efectueaza scadere cu imprumut intre bytes luati in ordine little endian din
+numerele a si b;
+		-> rezultatul scaderii dintre bytes se pune in numarul a pe aceeasi pozitie;
+		-> dupa ce s-a efectuat scaderea pe toti bytes, daca a rezultat un carry (imprumut)
+inseamna ca numarul rezultat e negativ si astfel se pune actualizeaza semnul lui a;
+		-> in urma scaderii poate rezulta MSB zero; astfel se inlatura acele zero-uri de la
+MSB spre LSB pana cand se intalneste un byte diferit de zero; se micsoreaza lungimea la fiecare
+MSB zero, dar avand grija ca lungimea sa nu devina zero.
+
+6) "*" (inmultire)
+
+	La inceput adaugam bytes de zero in numarul cu lungime mai mica la inceputul numarului respectiv,
+pentru ca cele doua numere sa aiba aceeasi lungime.
+	Ptr inmultire se inmulteste fiecare byte din numarul b (in ordine little endian) cu toti bytes
+din numarul a (in ordine little endian) la fiecare pas va rezulta un alt sir de bytes, decalat in functie
+de pozitia byte-ului din numarul b. Ne vom folosi de doi vectori byteArray si byteArray2, pentru a stoca
+aceste siruri doua cate doua, ca la fiecare pas sa le adunam in byteArray si sa retinem noul sir in byteArray2.
+Acesti vectori au ambii lungimea byteArrayEnd.
+	Sirul de numere se obtine astfel: Se ia un byte care va fi multiplicator (multiplier) din b, apoi
+fiecare byte din numarul a se inmulteste cu acest multiplicator, adunandu-se carry-ul daca s-a produs unul.
+Folosim functia mul pe bytes ceea ce inseamna ca putem obtine un carry mai mare in ah pe care il adunam la
+urmatorul rezultat. Daca si din adunarea respectiva rezulta un carry se adauga pur si simplu la carry-ul
+din ah (salvat in dl). Daca dupa inmultirea tuturor bytes din numarul a rezulta un carry atunci se mareste
+dimensiunea vectorilor si se adauga carry-ul in byte-ul nou.
+	Dupa al doilea sir astfel obtinut byteArray2 (primul s-a facut separat, pentru ca se obtine byteArray),
+se aduna cele doua siruri ca la adunarea numerelor cu acelasi semn, rezultatul fiin in byteArray. Algoritmul
+de inmultire se reia cu urmatorul byte din numarul b, se obtine un nou byteArray2 care se aduna la byteArray,
+pana cand se termina bytes din numarul b.
+	Astfel vom avea rezultatul inmultirii in byteArray, din care eliminam ca mai inainte zero-urile de la
+MSB si copiem acest sir in numarul a; apoi copiem si lungimea vectorului in a. Semnul rezultatului este cel
+al numarului b, daca numarul a este fara semn sau este semnul numarului a, daca numarul b este fara semn.
